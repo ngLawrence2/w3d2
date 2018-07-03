@@ -53,7 +53,10 @@ INSERT INTO
 VALUES
   ("Question1", "qqqqqq", 1),
   ("Q2", "question", 2),
-  ("Q3", "question", 3);
+  ("Q3", "question", 3),
+  ("Q4", "QQQQQ", 1),
+  ("Q5", "QQQQQ", 1),
+  ("Q6", "QQQQQ", 1);
 
 INSERT INTO
   questions_follows(question_id, user_id)
@@ -71,7 +74,7 @@ VALUES
 INSERT INTO
   question_likes(user_id, question_id)
 VALUES
-  (2,3),
+  (2,4),
   (3,1),
   (2,1);
   

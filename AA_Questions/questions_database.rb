@@ -12,19 +12,38 @@ class QuestionDatabase < SQLite3::Database
 
 end
 
-
-
-class Users
-  def self.find_by_id(id)
+class ModelBase 
+  def self.all(table_name)
+    data = QuestionDatabase.instance.execute(<<-SQL)
+      SELECT
+        *
+      FROM
+        #{table_name}
+    SQL
+  end 
+  
+  def self.find_by_id(table_name, child_class, id)
     data = QuestionDatabase.instance.execute(<<-SQL, id)
       SELECT
         *
       FROM
-        users
+        #{table_name}
       WHERE
         id = ?
     SQL
-    Users.new(data.first) unless data.empty?
+    child_class.new(data.first) unless data.empty?
+  end 
+  
+end 
+
+class Users < ModelBase
+  
+  def self.all
+      super('users')
+  end 
+  
+  def self.find_by_id(id)
+    super('users', self, id)
   end
   
   def self.find_by_name(fname, lname)
@@ -64,9 +83,49 @@ class Users
   def liked_questions
     Questions_Follows.liked_questions_for_user_id(id)
   end
+
+  def average_karma
+    data = QuestionDatabase.instance.execute(<<-SQL, id)
+      SELECT
+        COUNT(DISTINCT(questions.id)) AS num_questions, COUNT(user_id) AS karma
+      FROM
+        questions
+      LEFT JOIN
+        question_likes
+        ON questions.id = question_likes.question_id
+      WHERE
+        author_id = ?
+    SQL
+    data.first['num_questions'].to_f / data.first['karma']
+  end
+  
+  def save
+    if @id
+      update
+    else
+      QuestionDatabase.instance.execute(<<-SQL, @fname, @lname)
+        INSERT INTO
+          users (fname, lname)
+        VALUES
+          (?, ?)
+      SQL
+      @id = QuestionDatabase.instance.last_insert_row_id
+    end
+  end
+  
+  def update
+    QuestionDatabase.instance.execute(<<-SQL, @fname, @lname, @id)
+      UPDATE
+        users
+      SET
+        fname = ?, lname = ?
+      WHERE
+        id = ?
+    SQL
+  end
 end
 
-class Questions
+class Questions < ModelBase
   def self.find_by_id(id)
     data = QuestionDatabase.instance.execute(<<-SQL, id)
       SELECT
@@ -139,9 +198,34 @@ class Questions
   def num_likes
     Questions_Follows.num_likes_for_question_id(id)
   end
+  
+  def save
+    if @id
+      update
+    else
+      QuestionDatabase.instance.execute(<<-SQL, @title, @body, @author_id)
+        INSERT INTO
+          questions (title, body, author_id)
+        VALUES
+          (?, ?, ?)
+      SQL
+      @id = QuestionDatabase.instance.last_insert_row_id
+    end
+  end
+  
+  def update
+    QuestionDatabase.instance.execute(<<-SQL, @title, @body, @author_id, @id)
+      UPDATE
+        questions
+      SET
+        title = ?, body = ?, author_id = ?
+      WHERE
+        id = ?
+    SQL
+  end
 end
 
-class Replies
+class Replies < ModelBase
   def self.find_by_id(id)
     data = QuestionDatabase.instance.execute(<<-SQL, id)
       SELECT
@@ -211,10 +295,34 @@ class Replies
     SQL
     data.map {|datum| Replies.new(datum)}
   end
+
+  def save
+    if @id
+      update
+    else
+      QuestionDatabase.instance.execute(<<-SQL, @body, @question_id, @parent_id, @author_id)
+        INSERT INTO
+          replies (body, question_id, parent_id, author_id)
+        VALUES
+          (?, ?, ?, ?)
+      SQL
+      @id = QuestionDatabase.instance.last_insert_row_id
+    end
+  end
   
+  def update
+    QuestionDatabase.instance.execute(<<-SQL, @body, @question_id, @parent_id, @author_id, @id)
+      UPDATE
+        replies
+      SET
+        body = ?, question_id = ?, parent_id = ?, author_id = ?
+      WHERE
+        id = ?
+    SQL
+  end
 end
 
-class Questions_Follows
+class Questions_Follows < ModelBase
   def self.find_by_id(id)
     data = QuestionDatabase.instance.execute(<<-SQL, id)
       SELECT
@@ -288,7 +396,7 @@ class Questions_Follows
   end
 end
 
-class Question_Likes
+class Question_Likes < ModelBase
   def self.find_by_id(id)
     data = QuestionDatabase.instance.execute(<<-SQL, id)
       SELECT

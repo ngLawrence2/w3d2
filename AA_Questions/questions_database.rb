@@ -22,7 +22,7 @@ class ModelBase
     SQL
   end 
   
-  def self.find_by_id(table_name, child_class, id)
+  def self.find_by_id(table_name, id)
     data = QuestionDatabase.instance.execute(<<-SQL, id)
       SELECT
         *
@@ -31,8 +31,52 @@ class ModelBase
       WHERE
         id = ?
     SQL
-    child_class.new(data.first) unless data.empty?
+    self.new(data.first) unless data.empty?
   end 
+  
+  def self.where(opt, table_name)
+    str = []
+    keys = opt.keys
+    opt.each do |k,v|
+      str << "#{k} = ?"
+    end
+    str = str.join(" AND ")
+    values = opt.values
+    data = QuestionDatabase.instance.execute(<<-SQL, *values)
+      SELECT
+        *
+      FROM
+        #{table_name}
+      WHERE
+        (#{str})
+    SQL
+    data.map {|datum| self.new(datum)}
+  end
+  
+  def self.find_by(opt, table_name)
+    self.where(opt).first
+  end
+  
+  def save(table_name)
+    if id
+      update
+    else
+      keys = self.instance_variables.map { |sym| sym[1..-1]}
+      q_marks = (["?"] * keys.length).join(", ")
+      keys = keys.join(', ')
+      values = self.instance_variables
+      values.map!{|key| instance_variable_get(key)}
+
+      QuestionDatabase.instance.execute(<<-SQL, *values)
+        INSERT INTO
+          #{table_name} (#{keys})
+        VALUES
+          (#{q_marks})
+      SQL
+      id = QuestionDatabase.instance.last_insert_row_id
+    end
+  end
+  
   
 end 
 
@@ -43,7 +87,15 @@ class Users < ModelBase
   end 
   
   def self.find_by_id(id)
-    super('users', self, id)
+    super('users', id)
+  end
+  
+  def self.where(opt)
+    super(opt, 'users')
+  end
+  
+  def self.find_by(opt)
+    super(opt, 'users')
   end
   
   def self.find_by_name(fname, lname)
@@ -98,19 +150,9 @@ class Users < ModelBase
     SQL
     data.first['num_questions'].to_f / data.first['karma']
   end
-  
+
   def save
-    if @id
-      update
-    else
-      QuestionDatabase.instance.execute(<<-SQL, @fname, @lname)
-        INSERT INTO
-          users (fname, lname)
-        VALUES
-          (?, ?)
-      SQL
-      @id = QuestionDatabase.instance.last_insert_row_id
-    end
+    super('users')
   end
   
   def update
@@ -126,17 +168,16 @@ class Users < ModelBase
 end
 
 class Questions < ModelBase
+  
+  def self.all
+      super('questions')
+  end 
+  
   def self.find_by_id(id)
-    data = QuestionDatabase.instance.execute(<<-SQL, id)
-      SELECT
-        *
-      FROM
-        questions
-      WHERE
-        id = ?
-    SQL
-    Questions.new(data.first) unless data.empty?
+    super('questions', id)
   end
+  
+
   
   def self.find_by_title(title)
     data = QuestionDatabase.instance.execute(<<-SQL, title)
@@ -200,17 +241,7 @@ class Questions < ModelBase
   end
   
   def save
-    if @id
-      update
-    else
-      QuestionDatabase.instance.execute(<<-SQL, @title, @body, @author_id)
-        INSERT INTO
-          questions (title, body, author_id)
-        VALUES
-          (?, ?, ?)
-      SQL
-      @id = QuestionDatabase.instance.last_insert_row_id
-    end
+    super('questions')
   end
   
   def update
@@ -226,17 +257,16 @@ class Questions < ModelBase
 end
 
 class Replies < ModelBase
+  
+  
+  def self.all
+      super('replies')
+  end 
+  
   def self.find_by_id(id)
-    data = QuestionDatabase.instance.execute(<<-SQL, id)
-      SELECT
-        *
-      FROM
-        replies
-      WHERE
-        id = ?
-    SQL
-    Replies.new(data.first)
+    super('replies', id)
   end
+  
   
   def self.find_by_user_id(user_id)
     data = QuestionDatabase.instance.execute(<<-SQL, user_id)
@@ -297,17 +327,7 @@ class Replies < ModelBase
   end
 
   def save
-    if @id
-      update
-    else
-      QuestionDatabase.instance.execute(<<-SQL, @body, @question_id, @parent_id, @author_id)
-        INSERT INTO
-          replies (body, question_id, parent_id, author_id)
-        VALUES
-          (?, ?, ?, ?)
-      SQL
-      @id = QuestionDatabase.instance.last_insert_row_id
-    end
+    super('replies')
   end
   
   def update
@@ -323,16 +343,12 @@ class Replies < ModelBase
 end
 
 class Questions_Follows < ModelBase
+  def self.all
+      super('question_follows')
+  end 
+  
   def self.find_by_id(id)
-    data = QuestionDatabase.instance.execute(<<-SQL, id)
-      SELECT
-        *
-      FROM
-        questions_follows
-      WHERE
-        id = ?
-    SQL
-    Questions_Follows.new(data.first)
+    super('question_follows', id)
   end
   
   def self.followers_for_question_id(question_id)
@@ -394,19 +410,20 @@ class Questions_Follows < ModelBase
     @author_id = opt['user_id']
     @question_id = opt['question_id']
   end
+
+  def save
+    super('question_follows')
+  end
 end
 
 class Question_Likes < ModelBase
+
+  def self.all
+      super('question_likes')
+  end 
+  
   def self.find_by_id(id)
-    data = QuestionDatabase.instance.execute(<<-SQL, id)
-      SELECT
-        *
-      FROM
-        question_likes
-      WHERE
-        id = ?
-    SQL
-    Question_Likes.new(data.first)
+    super('question_likes', id)
   end
   
   def self.likers_for_question_id(question_id)
@@ -477,4 +494,9 @@ class Question_Likes < ModelBase
     @id = opt['id']
     @question_id=opt['question_id']
   end
+  
+  def save
+    super('question_likes')
+  end
+  
 end
